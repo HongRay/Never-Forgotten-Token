@@ -11,5 +11,31 @@
     "status": "created",
     "createdAt": "2025-07-12T06:53:45.169Z",
     "availableSupply": 0
+  },
+  {
+    "id": "1752332694683",
+    "name": "Demo NFT",
+    "description": "Test NFT",
+    "imageUrl": "https://via.placeholder.com/400x400/8b5cf6/ffffff?text=Demo%20NFT",
+    "price": "0.001",
+    "maxSupply": 100,
+    "soldCount": 0,
+    "owner": "0x41754dC46A98aa032C67E5D02E0A6D66475844cc",
+    "status": "created",
+    "createdAt": "2025-07-12T15:04:54.683Z",
+    "availableSupply": 0
+  },
+  {
+    "id": "1752333378421",
+    "name": "Demo NFT",
+    "description": "Test NFT",
+    "imageUrl": "https://via.placeholder.com/400x400/8b5cf6/ffffff?text=Demo%20NFT",
+    "price": "0.001",
+    "maxSupply": 100,
+    "soldCount": 0,
+    "owner": "0x41754dC46A98aa032C67E5D02E0A6D66475844cc",
+    "status": "created",
+    "createdAt": "2025-07-12T15:16:18.422Z",
+    "availableSupply": 0
   }
 ]

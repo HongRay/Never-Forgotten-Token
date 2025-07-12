@@ -7,11 +7,12 @@ import {
   sendTransaction, 
   prepareContractCall,
   readContract,
-  toWei
+  simulateTransaction
 } from 'thirdweb';
+import { toWei } from 'thirdweb';
 import { deployModularContract } from 'thirdweb/modules';
-import { MintableERC1155, BatchMetadataERC1155 } from 'thirdweb/modules';
-import { mintTo } from 'thirdweb/extensions/erc1155';
+import { MintableERC721, BatchMetadataERC721 } from 'thirdweb/modules';
+import { mintTo } from 'thirdweb/extensions/erc721';
 import { sepolia } from 'thirdweb/chains';
 import { privateKeyToAccount } from 'thirdweb/wallets';
 import { loadAssets, loadSales, saveAssets, saveSales } from './storage.js';
@@ -51,11 +52,11 @@ const getAccount = () => {
 };
 
 // 🚀 1. Deploy ERC1155 Contract (run once)
-app.post('/deploy-contract', async (req, res) => {
+app.post('/deploy-contract', async (_, res) => {
   try {
     const account = getAccount();
 
-    console.log('🚀 Deploying ERC1155 contract...');
+    console.log('🚀 Deploying ERC721 contract...');
     
     // Deploy the modular contract - let's debug what this returns
     console.log('Deploying modular contract...');
@@ -63,17 +64,17 @@ app.post('/deploy-contract', async (req, res) => {
       client,
       chain,
       account,
-      core: "ERC1155", // Deploy ERC1155 core contract
+      core: "ERC721", // Deploy ERC721 core contract
       params: {
         name: "Hackathon Buyable Assets",
         symbol: "HACK",
         contractURI: "https://marketplace.example.com/contract-metadata.json",
       },
       modules: [
-        MintableERC1155.module({
+        MintableERC721.module({
           primarySaleRecipient: account.address,
         }),
-        BatchMetadataERC1155.module(),
+        BatchMetadataERC721.module(),
       ],
     });
     
@@ -95,7 +96,7 @@ app.post('/deploy-contract', async (req, res) => {
       deployer: account.address,
       explorerUrl: `https://sepolia.etherscan.io/address/${contractAddress}`,
       transactionHash: transactionResult.transactionHash,
-      message: "🎉 ERC1155 contract deployed successfully!"
+      message: "🎉 ERC721 contract deployed successfully!"
     });
   } catch (error) {
     console.error('❌ Deploy error:', error);
@@ -143,7 +144,7 @@ app.post('/assets', (req, res) => {
 app.post('/tokenize/:assetId', async (req, res) => {
   try {
     const { assetId } = req.params;
-    const { initialSupply = 10 } = req.body;
+    // ERC721 tokens are unique - no supply parameter needed
     
     if (!contractAddress) {
       return res.status(400).json({ 
@@ -165,7 +166,7 @@ app.post('/tokenize/:assetId', async (req, res) => {
     // Get contract instance with v5 syntax
     const contract = getContract({
       client,
-      chain,
+      chain: sepolia, // Use the specific chain object
       address: contractAddress,
     });
     
@@ -185,27 +186,34 @@ app.post('/tokenize/:assetId', async (req, res) => {
       ]
     };
     
-    console.log(`🪙 Tokenizing "${asset.name}" with ${initialSupply} initial supply...`);
+    console.log(`🪙 Tokenizing "${asset.name}" as unique ERC721 NFT...`);
     
-    // Mint using Thirdweb v5 mintTo function
+    // Mint using Thirdweb v5 ERC721 mintTo function
     const transaction = mintTo({
       contract,
       to: account.address, // Mint to marketplace owner initially
       nft: metadata,
-      supply: BigInt(initialSupply),
     });
+    
+    // Optional: Simulate transaction first to catch errors early
+    try {
+      const simulation = await simulateTransaction({ transaction, account });
+      console.log("✅ Transaction simulation successful");
+    } catch (simError) {
+      console.error("❌ Transaction simulation failed:", simError);
+      // Continue anyway as simulation might fail but actual transaction could succeed
+    }
     
     // Send transaction
     const result = await sendTransaction({
       transaction,
       account,
-      chain,
     });
     
-    // Update asset status
+    // Update asset status - ERC721 creates unique tokens
     asset.status = 'tokenized';
     asset.tokenId = assetId; // Use assetId as tokenId for simplicity
-    asset.availableSupply = initialSupply;
+    asset.availableSupply = 1; // ERC721 tokens are unique (1 copy only)
     asset.transactionHash = result.transactionHash;
     saveAssets(assets); // Save to file
     
@@ -215,18 +223,40 @@ app.post('/tokenize/:assetId', async (req, res) => {
       success: true,
       tokenId: assetId,
       transactionHash: result.transactionHash,
-      initialSupply,
+      supply: 1, // ERC721 is always unique
       metadata,
       explorerUrl: `https://sepolia.etherscan.io/tx/${result.transactionHash}`,
       openseaUrl: `https://testnets.opensea.io/assets/sepolia/${contractAddress}/${assetId}`,
-      message: `🎉 Successfully tokenized "${asset.name}" with ${initialSupply} copies!`
+      message: `🎉 Successfully tokenized "${asset.name}" as unique ERC721 NFT!`
     });
     
   } catch (error) {
-    console.error('❌ Tokenization error:', error);
+    console.error('❌ Detailed tokenization error:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      stack: error.stack
+    });
+    
+    // Check specific error types
+    if (error.message?.includes('insufficient funds')) {
+      return res.status(500).json({ 
+        error: 'Insufficient funds for gas',
+        tip: 'Ensure your wallet has enough ETH on Sepolia testnet'
+      });
+    }
+    
+    if (error.message?.includes('nonce')) {
+      return res.status(500).json({ 
+        error: 'Transaction nonce issue',
+        tip: 'There may be pending transactions. Please wait and try again.'
+      });
+    }
+    
     res.status(500).json({ 
-      error: error.message,
-      tip: "Check your wallet has enough MATIC for gas fees"
+      error: error.message || 'Transaction failed',
+      details: error.details,
+      tip: "Check your wallet has enough ETH for gas fees on Sepolia testnet"
     });
   }
 });
@@ -254,17 +284,18 @@ app.post('/buy/:assetId', async (req, res) => {
       });
     }
     
-    if (asset.availableSupply < quantity) {
+    if (asset.availableSupply < 1 || quantity > 1) {
       return res.status(400).json({ 
-        error: `Not enough supply available. Only ${asset.availableSupply} left.`
+        error: `ERC721 NFT is unique - only 1 copy available and already ${asset.availableSupply ? 'available' : 'sold'}.`
       });
     }
     
-    // Calculate pricing
-    const totalPrice = parseFloat(asset.price) * quantity;
-    const priceInWei = toWei(totalPrice.toString());
+    // Calculate pricing for ERC721 (always quantity = 1)
+    const totalPrice = parseFloat(asset.price);
+    // Note: priceInWei would be used for actual payment processing
+    // const priceInWei = toWei(totalPrice.toString());
     
-    console.log(`💰 Processing purchase: ${quantity}x "${asset.name}" for ${totalPrice} ETH to ${buyer}`);
+    console.log(`💰 Processing purchase: "${asset.name}" for ${totalPrice} ETH to ${buyer}`);
     
     // For hackathon: simulate the purchase process
     // In production, you'd handle actual ETH transfer and NFT transfer
@@ -285,12 +316,12 @@ app.post('/buy/:assetId', async (req, res) => {
     sales.push(sale);
     saveSales(sales); // Save to file
     
-    // Update asset supply
-    asset.soldCount += quantity;
-    asset.availableSupply -= quantity;
+    // Update asset supply - ERC721 is now sold (0 available)
+    asset.soldCount = 1;
+    asset.availableSupply = 0;
     saveAssets(assets); // Save to file
     
-    console.log(`🎉 SALE COMPLETED: ${quantity}x "${asset.name}" sold to ${buyer.slice(0,8)}... for ${totalPrice} ETH`);
+    console.log(`🎉 SALE COMPLETED: "${asset.name}" sold to ${buyer.slice(0,8)}... for ${totalPrice} ETH`);
     
     res.json({
       success: true,
@@ -301,7 +332,7 @@ app.post('/buy/:assetId', async (req, res) => {
         totalSold: asset.soldCount
       },
       revenue: `${totalPrice} ETH`,
-      message: `🎉 Successfully purchased ${quantity}x "${asset.name}" for ${totalPrice} ETH!`,
+      message: `🎉 Successfully purchased "${asset.name}" for ${totalPrice} ETH!`,
       tip: "In production, this would transfer actual NFTs to your wallet"
     });
     
@@ -444,7 +475,7 @@ app.get('/search', (req, res) => {
 });
 
 // ❤️ 10. Health Check & Marketplace Stats
-app.get('/health', (req, res) => {
+app.get('/health', (_, res) => {
   const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalPrice, 0);
   const totalNFTsSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   
@@ -482,92 +513,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// 💸 BONUS: Gas-Optimized Batch Operations
-app.post('/batch-mint', async (req, res) => {
-  try {
-    const { assets } = req.body; // Array of assets to mint together
-    
-    if (!contractAddress) {
-      return res.status(400).json({ error: 'Deploy contract first!' });
-    }
-    
-    if (!assets || assets.length === 0) {
-      return res.status(400).json({ error: 'No assets provided' });
-    }
-    
-    const account = getAccount();
-    const contract = getContract({
-      client,
-      chain,
-      address: contractAddress,
-    });
-    
-    console.log(`💸 Batch minting ${assets.length} assets to save gas...`);
-    
-    // Prepare batch data
-    const recipients = assets.map(() => account.address);
-    const tokenIds = assets.map(asset => BigInt(asset.id));
-    const amounts = assets.map(asset => BigInt(asset.supply || 10));
-    const metadatas = assets.map(asset => ({
-      name: asset.name,
-      description: `${asset.description}\\n\\n💰 Price: ${asset.price} ETH`,
-      image: asset.imageUrl,
-      attributes: [
-        { trait_type: "Batch Mint", value: "Gas Optimized" },
-        { trait_type: "Price", value: `${asset.price} ETH` }
-      ]
-    }));
-    
-    // Use batch minting to save gas
-    const batchTx = mintTo({
-      contract,
-      to: account.address,
-      nft: metadatas[0], // For demo, use first metadata
-      supply: amounts.reduce((sum, amt) => sum + amt, 0n)
-    });
-    
-    // Optimize gas settings
-    const result = await sendTransaction({
-      transaction: batchTx,
-      account,
-      chain,
-      // Gas optimization settings
-      maxFeePerGas: toWei("30", "gwei"), // Cap gas price
-      maxPriorityFeePerGas: toWei("2", "gwei") // Reasonable tip
-    });
-    
-    // Update all assets
-    assets.forEach(asset => {
-      const existingAsset = assets.find(a => a.id === asset.id);
-      if (existingAsset) {
-        existingAsset.status = 'tokenized';
-        existingAsset.availableSupply = asset.supply || 10;
-        existingAsset.transactionHash = result.transactionHash;
-      }
-    });
-    
-    console.log(`✅ Batch minted ${assets.length} assets - TX: ${result.transactionHash}`);
-    
-    res.json({
-      success: true,
-      batchSize: assets.length,
-      transactionHash: result.transactionHash,
-      explorerUrl: `https://amoy.polygonscan.com/tx/${result.transactionHash}`,
-      gasOptimization: `Saved ~${(assets.length - 1) * 60}% gas by batching`,
-      message: `🎉 Batch minted ${assets.length} assets with 60-80% gas savings!`
-    });
-    
-  } catch (error) {
-    console.error('❌ Batch mint error:', error);
-    res.status(500).json({ 
-      error: error.message,
-      tip: "Batch minting failed - try individual minting"
-    });
-  }
-});
 
 // 🎯 Gas Price Oracle
-app.get('/gas-price', async (req, res) => {
+app.get('/gas-price', async (_, res) => {
   try {
     // Get current gas prices for optimization
     const gasPrice = await client.request({
@@ -587,7 +535,7 @@ app.get('/gas-price', async (req, res) => {
         gwei: Math.max(1, gasPriceGwei * 0.9), // 10% lower
         tip: "Use 10% lower gas price for non-urgent transactions"
       },
-      network: "Polygon Amoy Testnet",
+      network: "Ethereum Sepolia Testnet",
       recommendation: gasPriceGwei < 50 ? "Good time to transact" : "Consider waiting for lower gas"
     });
     
@@ -604,16 +552,16 @@ app.listen(PORT, () => {
 📍 http://localhost:${PORT}
 
 💡 Hackathon-ready features:
-   ✅ ERC1155 multi-edition NFTs 
-   ✅ Real blockchain deployment (Polygon Amoy)
+   ✅ ERC721 unique NFTs 
+   ✅ Real blockchain deployment (Ethereum Sepolia)
    ✅ Buyable assets with crypto pricing
    ✅ Revenue tracking & analytics
    ✅ Fast in-memory storage
    
 🔥 Demo Flow:
-   1. POST /deploy-contract (deploy ERC1155)
+   1. POST /deploy-contract (deploy ERC721)
    2. POST /assets (create buyable asset)
-   3. POST /tokenize/:id (mint NFT supply)
+   3. POST /tokenize/:id (mint unique NFT)
    4. POST /buy/:id (purchase with crypto!)
    5. GET /health (check revenue 💰)
 
