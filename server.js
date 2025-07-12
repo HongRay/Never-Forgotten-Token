@@ -10,12 +10,14 @@ import {
   toWei
 } from 'thirdweb';
 import { deployModularContract } from 'thirdweb/modules';
-import { MintableERC1155, BatchMetadataERC1155 } from 'thirdweb/modules';
-import { mintTo } from 'thirdweb/extensions/erc1155';
+import { MintableERC721, BatchMetadataERC721  } from 'thirdweb/modules';
+// import { ERC721Base } from "thirdweb/extensions/erc721";
+import { mintTo } from "thirdweb/extensions/erc721";
 import { sepolia } from 'thirdweb/chains';
 import { privateKeyToAccount } from 'thirdweb/wallets';
 import { ThirdwebStorage } from "@thirdweb-dev/storage";
 import { loadAssets, loadSales, saveAssets, saveSales } from './storage.js';
+import { deployERC721Contract } from "thirdweb/deploys";
 
 import multer from "multer";
 const upload = multer({ dest: "uploads/" });
@@ -54,12 +56,10 @@ const getAccount = () => {
   });
 };
 
-// 🚀 1. Deploy ERC1155 Contract (run once)
+// 🚀 1. Deploy ERC721 Contract (run once)
 app.post('/deploy-contract', async (req, res) => {
   try {
     const account = getAccount();
-
-    console.log('🚀 Deploying ERC1155 contract...');
     
     // Deploy the modular contract - let's debug what this returns
     console.log('Deploying modular contract...');
@@ -67,24 +67,35 @@ app.post('/deploy-contract', async (req, res) => {
       client,
       chain,
       account,
-      core: "ERC1155",
+      core: "ERC721",
       params: {
         name: "Never Forgotten Certificate",
         symbol: "NFT",
       },
       modules: [
-        MintableERC1155.module({
-          primarySaleRecipient: account.address, // or your wallet
+        ERC721Base.module({
+          primarySaleRecipient: account.address,
         }),
-        BatchMetadataERC1155.module(),
       ],
     });
     
-    console.log('✅ deployModularContract returned contract address:', deploymentResult);
+    // console.log('✅ deployModularContract returned contract address:', deploymentResult);
     
     // deployModularContract returns the contract address directly as a string
     contractAddress = deploymentResult;
-    
+
+    // const contractAddress = await deployERC721Contract({
+    //   chain,
+    //   client,
+    //   account,
+    //   type: "DropERC721",
+    //   params: {
+    //     name: "MyNFT",
+    //     description: "My NFT contract",
+    //     symbol: "NFT"
+    //   }
+    // });
+
     const transactionResult = {
       contractAddress,
       transactionHash: null, // deployModularContract doesn't return transaction hash, only contract address
@@ -129,7 +140,7 @@ app.get("/debug-contract", async (req, res) => {
 
 // 📝 2. Create Asset (with price and supply configuration)
 app.post('/assets', (req, res) => {
-  const { name, description, imageUrl, price, maxSupply, owner } = req.body;
+  const { name, description, imageUrl, price, owner } = req.body;
   
   if (!name || !description) {
     return res.status(400).json({ error: 'Name and description are required' });
@@ -141,7 +152,6 @@ app.post('/assets', (req, res) => {
     description,
     imageUrl: imageUrl || `https://via.placeholder.com/400x400/8b5cf6/ffffff?text=${encodeURIComponent(name)}`,
     price: price || "0.001", // Default 0.001 ETH 
-    maxSupply: maxSupply || 100,
     soldCount: 0,
     owner: owner || getAccount().address,
     status: 'created',
@@ -164,93 +174,69 @@ app.post('/assets', (req, res) => {
 app.post('/tokenize/:assetId', async (req, res) => {
   try {
     const { assetId } = req.params;
-    const { initialSupply = 10 } = req.body;
-    
+
     if (!contractAddress) {
-      return res.status(400).json({ 
-        error: 'Deploy contract first!',
-        tip: 'Use POST /deploy-contract endpoint'
-      });
+      return res.status(400).json({ error: 'Deploy contract first!' });
     }
-    
-    // Find asset
+
     const asset = assets.find(a => a.id === assetId);
-    if (!asset) {
-      return res.status(404).json({ error: 'Asset not found' });
-    }
-    
-    if (asset.status === 'tokenized') {
-      return res.status(400).json({ error: 'Asset already tokenized' });
-    }
-    
-    
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+    if (asset.status === 'tokenized') return res.status(400).json({ error: 'Already tokenized' });
+
     const account = getAccount();
-    
-    // Prepare NFT metadata
+
     const metadata = {
       name: asset.name,
-      description: `${asset.description}\\n\\n💰 Price: ${asset.price} ETH\\n📦 Max Supply: ${asset.maxSupply}\\n🏷️ Asset ID: ${assetId}`,
-      image: asset.imageUrl,
-      attributes: [
-        { trait_type: "Asset ID", value: assetId },
-        { trait_type: "Price", value: `${asset.price} ETH` },
-        { trait_type: "Max Supply", value: asset.maxSupply.toString() },
-        { trait_type: "Created", value: asset.createdAt },
-        { trait_type: "Category", value: "Buyable Asset" }
-      ]
+      description: `${asset.description}\n\n💰 Price: ${asset.price} ETH\n📦 \n🏷️ Asset ID: ${assetId}`,
+      image: asset.imageUrl
+      // attributes: [
+      //   { trait_type: "Asset ID", value: assetId },
+      //   { trait_type: "Price", value: `${asset.price} ETH` },
+      //   { trait_type: "Created", value: asset.createdAt },
+      //   { trait_type: "Category", value: "Buyable Asset" }
+      // ]
     };
-    
-    console.log(`🪙 Tokenizing "${asset.name}" with ${initialSupply} initial supply...`);
-    
-    console.log(`🪙 Minting ${initialSupply} copies…`);
-    
+
     const contract = getContract({
       client,
       chain,
       address: contractAddress,
     });
 
-    const transaction = mintTo({
+    console.log("⏳ Minting via extensions.erc721.mintTo...");
+    console.log(contract.erc721);
+    const tx = prepareContractCall({
       contract,
-      to: account.address, // Mint to marketplace owner initially
-      nft: metadata,
-      supply: BigInt(initialSupply),
-    });
-    
-    // Send transaction
-    const result = await sendTransaction({
-      transaction,
-      account,
+      method: "function mintTo(address to, string uri)",
+      params: [account.address, asset.metadataUri], // from storage upload
     });
 
-    // Update asset status
+    const result = await sendTransaction({
+      transaction: tx,
+      account,
+      chain,
+    });
     asset.status = 'tokenized';
-    asset.tokenId = assetId; // Use assetId as tokenId for simplicity
-    asset.availableSupply = initialSupply;
-    asset.transactionHash = result.transactionHash;
-    saveAssets(assets); // Save to file
-    
-    console.log(`✅ Tokenized "${asset.name}" - TX: ${result.transactionHash}`);
-    
+    asset.tokenId = assetId;
+    asset.transactionHash = sentTx;
+
+    saveAssets(assets);
+
     res.json({
       success: true,
       tokenId: assetId,
       transactionHash: result.transactionHash,
-      initialSupply,
-      metadata,
       explorerUrl: `https://sepolia.etherscan.io/tx/${result.transactionHash}`,
       openseaUrl: `https://testnets.opensea.io/assets/sepolia/${contractAddress}/${assetId}`,
-      message: `🎉 Successfully tokenized "${asset.name}" with ${initialSupply} copies!`
+      message: `✅ Tokenized "${asset.name}"!`
     });
-    
+
   } catch (error) {
     console.error('❌ Tokenization error:', error);
-    res.status(500).json({ 
-      error: error.message,
-      tip: "Check your wallet has enough MATIC for gas fees"
-    });
+    res.status(500).json({ error: error.message });
   }
 });
+
 
 // 💰 4. BUY NFT - The core marketplace functionality!
 app.post('/buy/:assetId', async (req, res) => {
@@ -277,7 +263,7 @@ app.post('/buy/:assetId', async (req, res) => {
     
     if (asset.availableSupply < quantity) {
       return res.status(400).json({ 
-        error: `Not enough supply available. Only ${asset.availableSupply} left.`
+        error: `Not enough supply available.`
       });
     }
     
@@ -308,7 +294,6 @@ app.post('/buy/:assetId', async (req, res) => {
     
     // Update asset supply
     asset.soldCount += quantity;
-    asset.availableSupply -= quantity;
     saveAssets(assets); // Save to file
     
     console.log(`🎉 SALE COMPLETED: ${quantity}x "${asset.name}" sold to ${buyer.slice(0,8)}... for ${totalPrice} ETH`);
@@ -318,7 +303,6 @@ app.post('/buy/:assetId', async (req, res) => {
       sale,
       asset: {
         name: asset.name,
-        remainingSupply: asset.availableSupply,
         totalSold: asset.soldCount
       },
       revenue: `${totalPrice} ETH`,
@@ -528,7 +512,6 @@ app.post('/batch-mint', async (req, res) => {
     // Prepare batch data
     const recipients = assets.map(() => account.address);
     const tokenIds = assets.map(asset => BigInt(asset.id));
-    const amounts = assets.map(asset => BigInt(asset.supply || 10));
     const metadatas = assets.map(asset => ({
       name: asset.name,
       description: `${asset.description}\\n\\n💰 Price: ${asset.price} ETH`,
@@ -632,7 +615,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 //create metadata for NFT a
 app.post("/create-metadata", async (req, res) => {
   try {
-    const { name, description, imageUrl, price, maxSupply = 1, attributes } = req.body;
+    const { name, description, imageUrl, price, attributes } = req.body;
 
     // 1. Upload metadata to IPFS
     const metadata = { name, description, image: imageUrl, attributes };
@@ -645,7 +628,6 @@ app.post("/create-metadata", async (req, res) => {
       description,
       imageUrl,
       price: price || "0.001",
-      maxSupply,
       soldCount: 0,
       owner: getAccount().address,
       status: 'created',

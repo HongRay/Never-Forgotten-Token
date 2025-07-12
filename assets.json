@@ -46,12 +46,12 @@
     "description": "Official certificate issued testestest",
     "imageUrl": "ipfs://QmdnCt3bza4uVLhaYTrkBreSAq3Qj3EQdUCr9NWR16gXkC/0",
     "price": "0.001",
-    "maxSupply": 1,
     "soldCount": 0,
     "owner": "0xDd054E532CA94b7E744A0934D5d54206995C83f0",
-    "status": "created",
+    "status": "tokenized",
     "createdAt": "2025-07-12T08:34:17.110Z",
     "availableSupply": 1,
-    "metadataUri": "ipfs://QmVnkrb1tgi68TvkTQ7zNtBYdbFfizgzSw7hp5qVQEEc3q/0"
+    "metadataUri": "ipfs://QmVnkrb1tgi68TvkTQ7zNtBYdbFfizgzSw7hp5qVQEEc3q/0",
+    "tokenId": "1752309257037"
   }
 ]
