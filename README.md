@@ -1,5 +1,7 @@
 # NFiniT - Never Forgotten Token
 
+🚀 **[Live Demo](https://never-forgetten-tokens.lovable.app/)** | Experience NFiniT in action
+
 **We Die Twice: Once When We Perish, Again When Forgotten**
 
 A blockchain-powered memorial platform that preserves the memories and legacy of loved ones as permanent NFTs on the Ethereum blockchain.
