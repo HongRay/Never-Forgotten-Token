@@ -151,4 +151,11 @@ CHAIN_ID=80002
 
 **Built with ❤️ for hackathon success!** 
 
-*This demonstrates real value: turning any asset into sellable NFTs with actual crypto payments!* 🚀
+*This demonstrates real value: turning any asset into sellable NFTs with actual crypto payments!* 🚀'
+
+
+# Stuff to do
+- Buying and selling of NFT (now is simulated/smart contract)
+- Fronted back api test 
+- Death certs to tokenization to assets
+- 
