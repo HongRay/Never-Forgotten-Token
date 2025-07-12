@@ -203,26 +203,25 @@ app.post('/tokenize/:assetId', async (req, res) => {
     console.log(`🪙 Tokenizing "${asset.name}" with ${initialSupply} initial supply...`);
     
     console.log(`🪙 Minting ${initialSupply} copies…`);
-    const preparedTx = await prepareContractCall({
-      contract,
-      method: "mintTo",
-      params: [
-        account.address,
-        metadata,
-        BigInt(initialSupply)
-      ]
-    });
-
-    const sentTx = await sendTransaction({
-      transaction: preparedTx,
-      account,
+    
+    const contract = getContract({
+      client,
       chain,
+      address: contractAddress,
     });
 
-    console.log("sentTx =", sentTx); 
-
-
-    const transactionHash = sentTx?.transactionHash || sentTx?.receipt?.transactionHash || "unknown";
+    const transaction = mintTo({
+      contract,
+      to: account.address, // Mint to marketplace owner initially
+      nft: metadata,
+      supply: BigInt(initialSupply),
+    });
+    
+    // Send transaction
+    const result = await sendTransaction({
+      transaction,
+      account,
+    });
 
     // Update asset status
     asset.status = 'tokenized';
