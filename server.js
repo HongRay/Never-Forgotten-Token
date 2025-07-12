@@ -14,6 +14,7 @@ import { MintableERC1155, BatchMetadataERC1155 } from 'thirdweb/modules';
 import { mintTo } from 'thirdweb/extensions/erc1155';
 import { sepolia } from 'thirdweb/chains';
 import { privateKeyToAccount } from 'thirdweb/wallets';
+import { loadAssets, loadSales, saveAssets, saveSales } from './storage.js';
 
 dotenv.config();
 
@@ -30,10 +31,15 @@ const client = createThirdwebClient({
 const chain = sepolia;
 console.log('Chain configuration:', chain);
 
-// In-memory storage (perfect for hackathon speed)
-let assets = [];
-let sales = [];
-let contractAddress = null;
+// Persistent storage with JSON files
+let assets = loadAssets();
+let sales = loadSales();
+let contractAddress = process.env.CONTRACT_ADDRESS || null;
+
+console.log(`📁 Loaded ${assets.length} assets and ${sales.length} sales from storage`);
+if (contractAddress) {
+  console.log(`📄 Using contract: ${contractAddress}`);
+}
 
 
 // Create account from private key
@@ -123,6 +129,7 @@ app.post('/assets', (req, res) => {
   };
   
   assets.push(asset);
+  saveAssets(assets); // Save to file
   console.log(`✨ Created asset: ${name} - Price: ${asset.price} ETH`);
   
   res.json({ 
@@ -200,6 +207,7 @@ app.post('/tokenize/:assetId', async (req, res) => {
     asset.tokenId = assetId; // Use assetId as tokenId for simplicity
     asset.availableSupply = initialSupply;
     asset.transactionHash = result.transactionHash;
+    saveAssets(assets); // Save to file
     
     console.log(`✅ Tokenized "${asset.name}" - TX: ${result.transactionHash}`);
     
@@ -275,10 +283,12 @@ app.post('/buy/:assetId', async (req, res) => {
     };
     
     sales.push(sale);
+    saveSales(sales); // Save to file
     
     // Update asset supply
     asset.soldCount += quantity;
     asset.availableSupply -= quantity;
+    saveAssets(assets); // Save to file
     
     console.log(`🎉 SALE COMPLETED: ${quantity}x "${asset.name}" sold to ${buyer.slice(0,8)}... for ${totalPrice} ETH`);
     

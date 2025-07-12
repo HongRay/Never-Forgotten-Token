@@ -1,0 +1,15 @@
+[
+  {
+    "id": "1752303225169",
+    "name": "Hackathon NFT Collection #1",
+    "description": "A limited edition digital artwork perfect for trading",
+    "imageUrl": "https://via.placeholder.com/500x500/6366f1/ffffff?text=Hackathon+NFT",
+    "price": "0.005",
+    "maxSupply": 25,
+    "soldCount": 0,
+    "owner": "0x742d35Cc6634C0532925a3b8D93C0dd4B7c4f2ca",
+    "status": "created",
+    "createdAt": "2025-07-12T06:53:45.169Z",
+    "availableSupply": 0
+  }
+]
