@@ -157,5 +157,4 @@ CHAIN_ID=80002
 # Stuff to do
 - Buying and selling of NFT (now is simulated/smart contract)
 - Fronted back api test 
-- Death certs to tokenization to assets
-- 
+- Death certs to tokenization to assets (HR)

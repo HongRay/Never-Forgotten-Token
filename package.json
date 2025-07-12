@@ -9,14 +9,23 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["nft", "marketplace", "erc1155", "thirdweb", "polygon", "hackathon"],
+  "keywords": [
+    "nft",
+    "marketplace",
+    "erc1155",
+    "thirdweb",
+    "polygon",
+    "hackathon"
+  ],
   "author": "Hackathon Team",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "thirdweb": "^5.0.0",
+    "@thirdweb-dev/storage": "^2.0.15",
+    "cors": "^2.8.5",
     "dotenv": "^16.0.3",
-    "cors": "^2.8.5"
+    "express": "^4.18.2",
+    "multer": "^2.0.1",
+    "thirdweb": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

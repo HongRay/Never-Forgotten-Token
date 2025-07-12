@@ -14,10 +14,14 @@ import { MintableERC1155, BatchMetadataERC1155 } from 'thirdweb/modules';
 import { mintTo } from 'thirdweb/extensions/erc1155';
 import { sepolia } from 'thirdweb/chains';
 import { privateKeyToAccount } from 'thirdweb/wallets';
+import { ThirdwebStorage } from "@thirdweb-dev/storage";
 import { loadAssets, loadSales, saveAssets, saveSales } from './storage.js';
 
-dotenv.config();
+import multer from "multer";
+const upload = multer({ dest: "uploads/" });
 
+dotenv.config();
+const storage = new ThirdwebStorage({ clientId: process.env.THIRDWEB_CLIENT_ID});
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -63,15 +67,14 @@ app.post('/deploy-contract', async (req, res) => {
       client,
       chain,
       account,
-      core: "ERC1155", // Deploy ERC1155 core contract
+      core: "ERC1155",
       params: {
-        name: "Hackathon Buyable Assets",
-        symbol: "HACK",
-        contractURI: "https://marketplace.example.com/contract-metadata.json",
+        name: "Never Forgotten Certificate",
+        symbol: "NFT",
       },
       modules: [
         MintableERC1155.module({
-          primarySaleRecipient: account.address,
+          primarySaleRecipient: account.address, // or your wallet
         }),
         BatchMetadataERC1155.module(),
       ],
@@ -105,6 +108,24 @@ app.post('/deploy-contract', async (req, res) => {
     });
   }
 });
+
+app.get("/debug-contract", async (req, res) => {
+  try {
+    const contract = getContract({
+      client,
+      chain,
+      address: contractAddress,
+    });
+
+    res.json({
+      features: contract.features, // shows supported features/modules
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load contract info" });
+  }
+});
+
 
 // 📝 2. Create Asset (with price and supply configuration)
 app.post('/assets', (req, res) => {
@@ -162,12 +183,6 @@ app.post('/tokenize/:assetId', async (req, res) => {
       return res.status(400).json({ error: 'Asset already tokenized' });
     }
     
-    // Get contract instance with v5 syntax
-    const contract = getContract({
-      client,
-      chain,
-      address: contractAddress,
-    });
     
     const account = getAccount();
     
@@ -187,21 +202,28 @@ app.post('/tokenize/:assetId', async (req, res) => {
     
     console.log(`🪙 Tokenizing "${asset.name}" with ${initialSupply} initial supply...`);
     
-    // Mint using Thirdweb v5 mintTo function
-    const transaction = mintTo({
+    console.log(`🪙 Minting ${initialSupply} copies…`);
+    const preparedTx = await prepareContractCall({
       contract,
-      to: account.address, // Mint to marketplace owner initially
-      nft: metadata,
-      supply: BigInt(initialSupply),
+      method: "mintTo",
+      params: [
+        account.address,
+        metadata,
+        BigInt(initialSupply)
+      ]
     });
-    
-    // Send transaction
-    const result = await sendTransaction({
-      transaction,
+
+    const sentTx = await sendTransaction({
+      transaction: preparedTx,
       account,
       chain,
     });
-    
+
+    console.log("sentTx =", sentTx); 
+
+
+    const transactionHash = sentTx?.transactionHash || sentTx?.receipt?.transactionHash || "unknown";
+
     // Update asset status
     asset.status = 'tokenized';
     asset.tokenId = assetId; // Use assetId as tokenId for simplicity
@@ -595,6 +617,61 @@ app.get('/gas-price', async (req, res) => {
     res.status(500).json({ error: "Could not fetch gas prices" });
   }
 });
+
+// upload death certificate to IPFS using Thirdweb Storage
+app.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    const filePath = req.file.path;
+    const uploaded = await storage.upload(filePath);
+    res.json({ ipfsUrl: uploaded });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+//create metadata for NFT a
+app.post("/create-metadata", async (req, res) => {
+  try {
+    const { name, description, imageUrl, price, maxSupply = 1, attributes } = req.body;
+
+    // 1. Upload metadata to IPFS
+    const metadata = { name, description, image: imageUrl, attributes };
+    const metadataUri = await storage.upload(metadata);
+
+    // 2. Create asset using metadata info
+    const asset = {
+      id: Date.now().toString(),
+      name,
+      description,
+      imageUrl,
+      price: price || "0.001",
+      maxSupply,
+      soldCount: 0,
+      owner: getAccount().address,
+      status: 'created',
+      createdAt: new Date().toISOString(),
+      availableSupply: 0,
+      metadataUri
+    };
+
+    assets.push(asset);
+    saveAssets(assets);
+
+    res.json({
+      success: true,
+      asset,
+      metadataUri,
+      message: `✅ Asset "${name}" created with metadata!`
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Metadata + asset creation failed" });
+  }
+});
+
+
 
 // Start server
 const PORT = process.env.PORT || 3000;
