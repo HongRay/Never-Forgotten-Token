@@ -343,6 +343,7 @@ app.get('/assets', (req, res) => {
     stats,
     contractAddress
   });
+  console.log(`📊 Fetched ${filteredAssets.length} assets - Status: ${status || 'all'} - Sorted by: ${sortBy}`);
 });
 
 // 📄 6. Get Asset Details
