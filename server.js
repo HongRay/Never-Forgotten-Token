@@ -28,6 +28,7 @@ const client = createThirdwebClient({
 
 // Use Ethereum Sepolia testnet
 const chain = sepolia;
+console.log('Chain configuration:', chain);
 
 // In-memory storage (perfect for hackathon speed)
 let assets = [];
@@ -50,8 +51,9 @@ app.post('/deploy-contract', async (req, res) => {
 
     console.log('🚀 Deploying ERC1155 contract...');
     
-    // Prepare the deployment transaction
-    const deployTx = await deployModularContract({
+    // Deploy the modular contract - let's debug what this returns
+    console.log('Deploying modular contract...');
+    const deploymentResult = await deployModularContract({
       client,
       chain,
       account,
@@ -69,17 +71,16 @@ app.post('/deploy-contract', async (req, res) => {
       ],
     });
     
-    // Ensure the transaction has the chain property set
-    deployTx.chain = chain;
+    console.log('✅ deployModularContract returned contract address:', deploymentResult);
     
-    // Send the transaction
-    const transactionResult = await sendTransaction({
-      transaction: deployTx,
-      account,
-    });
+    // deployModularContract returns the contract address directly as a string
+    contractAddress = deploymentResult;
     
-    // Wait for the transaction to be mined and get the contract address
-    contractAddress = transactionResult.contractAddress;
+    const transactionResult = {
+      contractAddress,
+      transactionHash: null, // deployModularContract doesn't return transaction hash, only contract address
+    };
+    
     console.log("✅ Contract deployed:", contractAddress);
     
     res.json({ 
@@ -191,6 +192,7 @@ app.post('/tokenize/:assetId', async (req, res) => {
     const result = await sendTransaction({
       transaction,
       account,
+      chain,
     });
     
     // Update asset status
@@ -518,6 +520,7 @@ app.post('/batch-mint', async (req, res) => {
     const result = await sendTransaction({
       transaction: batchTx,
       account,
+      chain,
       // Gas optimization settings
       maxFeePerGas: toWei("30", "gwei"), // Cap gas price
       maxPriorityFeePerGas: toWei("2", "gwei") // Reasonable tip
